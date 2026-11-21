@@ -4,10 +4,9 @@
 use crate::AiError;
 use gp_core::config::Ocr as OcrConfig;
 use image::{DynamicImage, ImageBuffer, Rgba};
-use ndarray::{Array4, CowArray, s};
+use ndarray::{Array4, s};
 use ort::{GraphOptimizationLevel, Session, SessionBuilder};
 use std::path::{Path, PathBuf};
-use std::sync::OnceLock;
 
 // RapidOCR model URLs (hosted on Hugging Face)
 const DET_MODEL_URL: &str =
@@ -118,7 +117,7 @@ impl OcrEngine {
         // Convert RGBA to RGB
         let img = ImageBuffer::<Rgba<u8>, _>::from_raw(width, height, data.to_vec())
             .ok_or_else(|| AiError::Config("invalid frame dimensions".into()))?;
-        let rgb_img = DynamicImage::ImageRgba8(img).to_rgb8();
+        let rgb_img = DynamicImage::ImageRgb8(DynamicImage::ImageRgba8(img).to_rgb8());
 
         // Detect text boxes
         let boxes = self.detect_text(&rgb_img)?;
@@ -143,8 +142,8 @@ impl OcrEngine {
 
     /// Detect text regions using DBNet.
     fn detect_text(&self, img: &DynamicImage) -> Result<Vec<Vec<(f32, f32)>>, AiError> {
-        let (input, ratio_w, ratio_h) = preprocess_det(img);
-        let input_array = Array4::from_shape_vec((1, 3, input.height() as usize, input.width() as usize), input)
+        let (input_data, new_w, new_h, ratio_w, ratio_h) = preprocess_det(img);
+        let input_array = Array4::from_shape_vec((1, 3, new_h, new_w), input_data)
             .map_err(|e| AiError::Config(format!("det input shape failed: {e}")))?;
 
         let outputs = self.det_session.run(ort::inputs!["x" => input_array.view()])
@@ -217,29 +216,28 @@ impl OcrEngine {
 }
 
 /// Preprocess image for DBNet detection.
-fn preprocess_det(img: &DynamicImage) -> (ImageBuffer<image::Rgb<f32>, Vec<f32>>, f32, f32) {
+/// Returns (CHW-normalized data, width, height, ratio_w, ratio_h).
+fn preprocess_det(img: &DynamicImage) -> (Vec<f32>, usize, usize, f32, f32) {
     let max_side = 960;
     let (w, h) = (img.width() as f32, img.height() as f32);
     let scale = max_side as f32 / w.max(h);
-    let new_w = (w * scale / 32.0).ceil() * 32.0;
-    let new_h = (h * scale / 32.0).ceil() * 32.0;
+    let new_w = ((w * scale / 32.0).ceil() * 32.0) as usize;
+    let new_h = ((h * scale / 32.0).ceil() * 32.0) as usize;
 
     let resized = img.resize_exact(new_w as u32, new_h as u32, image::imageops::FilterType::Triangle);
     let rgb = resized.to_rgb8();
 
-    let mut data = Vec::with_capacity(3 * new_w as usize * new_h as usize);
+    let mut data = Vec::with_capacity(3 * new_w * new_h);
     for c in 0..3 {
-        for y in 0..new_h as usize {
-            for x in 0..new_w as usize {
+        for y in 0..new_h {
+            for x in 0..new_w {
                 let pixel = rgb.get_pixel(x as u32, y as u32)[c] as f32 / 255.0;
                 data.push((pixel - 0.5) / 0.5); // Normalize to [-1, 1]
             }
         }
     }
 
-    let input = ImageBuffer::from_raw(new_w as u32, new_h as u32, data)
-        .expect("preprocess data size mismatch");
-    (input, w / new_w, h / new_h)
+    (data, new_w, new_h, w / new_w as f32, h / new_h as f32)
 }
 
 /// Postprocess detection output to get text boxes.
