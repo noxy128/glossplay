@@ -1,5 +1,5 @@
 use crate::i18n::{self, Tr, t, tf};
-use crate::jobs::{AsrParams, CONTEXT_SENTENCES, Jobs, Msg, TranslateJob};
+use crate::jobs::{AsrParams, CONTEXT_SENTENCES, Jobs, Msg, OcrLine, TranslateJob};
 use crate::player::{Player, Snapshot, TrackInfo, TrackKind};
 use crate::session::{
     Load, Origin, Secondary, Session, SubTrack, normalize_lang, sidecar_subtitles,
@@ -147,6 +147,8 @@ pub struct App {
     pub frame_done: Option<(u64, Result<PathBuf, String>)>,
     /// The message on screen names a file that can be shown in its folder.
     pub toast_reveal: Option<PathBuf>,
+    /// OCR result waiting to be shown.
+    pub ocr_result: Option<(u64, Vec<OcrLine>)>,
 }
 
 impl App {
@@ -989,6 +991,7 @@ impl App {
                 Msg::Component { id, event } => self.on_component_event(&id, event),
                 Msg::FrameSaved { request, result } => self.on_frame_saved(request, result),
                 Msg::FrameCopied(result) => self.on_frame_copied(result),
+                Msg::OcrDone { request, result } => self.on_ocr_done(request, result),
                 _ => {}
             }
         }
@@ -1460,6 +1463,77 @@ fn in_view(t: &SubTrack, cues: &[usize], limit: usize) -> Option<Vec<usize>> {
 }
 
 impl App {
+    /// Run OCR on the current video frame.
+    /// If `translate` is true, also translates the recognized text.
+    fn ocr_current_frame(&mut self, translate: bool) {
+        if !self.config.ocr.enabled {
+            self.toast(t(Tr::OcrDisabled));
+            return;
+        }
+
+        // Use mpv's screenshot-to-file with "video" to get raw frame
+        let temp_path = std::env::temp_dir().join(format!("glossplay_ocr_{}.png", std::process::id()));
+        
+        let mpv = self.player.mpv.clone();
+        let result = mpv.command(&["screenshot-to-file", &temp_path.to_string_lossy(), "video"]);
+        
+        if let Err(e) = result {
+            self.toast(tf(Tr::OcrCaptureFailed, &[&e.to_string()]));
+            return;
+        }
+
+        // Read the image
+        let image = match image::open(&temp_path) {
+            Ok(img) => img,
+            Err(e) => {
+                self.toast(tf(Tr::OcrReadFailed, &[&e.to_string()]));
+                let _ = std::fs::remove_file(&temp_path);
+                return;
+            }
+        };
+        let _ = std::fs::remove_file(&temp_path);
+
+        let rgb = image.to_rgb8();
+        let (width, height) = rgb.dimensions();
+        let rgba: Vec<u8> = rgb.pixels().flat_map(|p| [p[0], p[1], p[2], 255]).collect();
+
+        let translator = match make_translator(&self.config) {
+            Ok(t) => t,
+            Err(e) => {
+                self.toast(tf(Tr::OcrTranslateFailed, &[&e]));
+                return;
+            }
+        };
+
+        let config = self.config.ocr.clone();
+        let src_lang = if self.config.general.learn_lang.is_empty() {
+            None
+        } else {
+            Some(self.config.general.learn_lang.clone())
+        };
+        let dst_lang = self.config.general.native_lang.clone();
+
+        let request = self.next_frame_request();
+        self.jobs.ocr_frame(
+            request,
+            width,
+            height,
+            rgba,
+            config,
+            translator,
+            src_lang,
+            dst_lang,
+        );
+
+        self.toast(t(Tr::OcrStarted));
+    }
+
+    fn next_frame_request(&self) -> u64 {
+        use std::sync::atomic::{AtomicU64, Ordering};
+        static COUNTER: AtomicU64 = AtomicU64::new(1);
+        COUNTER.fetch_add(1, Ordering::Relaxed)
+    }
+
     /// The yt-dlp mpv uses: the one in the settings, or the copy I keep up to date.
     fn ytdl_binary(&self) -> PathBuf {
         if self.cfg.player.ytdl_path.is_empty() {

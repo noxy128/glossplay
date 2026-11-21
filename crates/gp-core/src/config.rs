@@ -11,6 +11,7 @@ pub struct Config {
     pub tts: Tts,
     pub training: Training,
     pub anki: Anki,
+    pub ocr: Ocr,
     pub sources: Sources,
 }
 
@@ -262,6 +263,36 @@ impl Default for Anki {
         Anki {
             url: "http://127.0.0.1:8765".into(),
             deck: "Glossplay".into(),
+        }
+    }
+}
+
+/// OCR settings for extracting text from video frames (slides, on-screen text).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(default)]
+pub struct Ocr {
+    pub enabled: bool,
+    /// Engine: "rapidocr" (ONNX, fast) or "paddleocr" (accuracy).
+    pub engine: String,
+    /// Path to model directory. Empty = bundled models.
+    pub model_path: String,
+    /// Language codes, comma-separated (e.g. "en,ru,zh").
+    pub languages: String,
+    /// Confidence threshold 0-100; low-confidence words are skipped.
+    pub confidence_threshold: u8,
+    /// Show original text above translation for learning.
+    pub show_context: bool,
+}
+
+impl Default for Ocr {
+    fn default() -> Self {
+        Ocr {
+            enabled: false,
+            engine: "rapidocr".into(),
+            model_path: String::new(),
+            languages: "en,ru,zh".into(),
+            confidence_threshold: 60,
+            show_context: true,
         }
     }
 }

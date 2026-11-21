@@ -10,3 +10,10 @@ serde.workspace = true
 serde_json.workspace = true
 roxmltree = "0.21"
 ureq = { version = "3", features = ["json"] }
+image = "0.25"
+ort = { version = "2", features = ["load-model-from-memory"] }
+ndarray = "0.16"
+
+[features]
+default = []
+cuda = ["ort/cuda"]

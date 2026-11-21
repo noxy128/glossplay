@@ -217,6 +217,37 @@ messages! {
         "Перекладати, якщо немає доріжки моєю мовою"
     ],
     SectionTranslation => ["Translation", "Перевод", "Переклад"],
+    SectionOcr => ["OCR", "OCR", "OCR"],
+    OcrEnabledRow => [
+        "Enable OCR",
+        "Включить OCR",
+        "Увімкнути OCR"
+    ],
+    OcrEngineRow => [
+        "Engine",
+        "Движок",
+        "Двигун"
+    ],
+    OcrLanguagesRow => [
+        "Languages",
+        "Языки",
+        "Мови"
+    ],
+    OcrConfidenceRow => [
+        "Confidence threshold",
+        "Порог уверенности",
+        "Поріг впевненості"
+    ],
+    OcrContextRow => [
+        "Show context",
+        "Показывать контекст",
+        "Показувати контекст"
+    ],
+    OcrContextHint => [
+        "Show the original text above the translation for learning",
+        "Показывать оригинальный текст над переводом для обучения",
+        "Показувати оригінальний текст над перекладом для навчання"
+    ],
     ServiceRow => ["Service", "Сервис", "Сервіс"],
     ModelRow => ["Model", "Модель", "Модель"],
     ModelNameHint => ["model name", "название модели", "назва моделі"],
@@ -1176,6 +1207,11 @@ messages! {
         "Переводит субтитры на ваш язык. Google Translate работает без ключа; для DeepL, OpenAI и Claude нужен ключ API.",
         "Перекладає субтитри вашою мовою. Google Translate працює без ключа; для DeepL, OpenAI і Claude потрібен ключ API."
     ],
+    IntroOcr => [
+        "Recognizes text on the video frame and translates it. The translation appears below each line so you can learn unfamiliar words without covering the original text.",
+        "Распознает текст на кадре видео и переводит его. Перевод появляется под каждой строкой, чтобы вы могли учить незнакомые слова, не перекрывая основной текст.",
+        "Розпізнає текст на кадрі відео і перекладає його. Переклад з’являється під кожним рядком, щоб ви могли вчити незнайомі слова, не прикриваючи основний текст."
+    ],
     IntroSpeech => [
         "Makes subtitles from the speech when a video has none. It runs on this computer after a one-time download. While watching: Subtitles menu → \"{0}\".",
         "Делает субтитры из речи, если у видео их нет. Работает на этом компьютере после однократной загрузки. Во время просмотра: меню «Субтитры» → «{0}».",
@@ -1370,6 +1406,16 @@ messages! {
         "Зберегти кадр із субтитрами"
     ],
     MenuCopyFrame => ["Copy the frame", "Скопировать кадр", "Скопіювати кадр"],
+    MenuOcrFrame => [
+        "OCR this frame",
+        "Распознать текст на кадре",
+        "Розпізнати текст на кадрі"
+    ],
+    MenuOcrFrameTranslate => [
+        "OCR and translate this frame",
+        "Распознать и перевести кадр",
+        "Розпізнати і перекласти кадр"
+    ],
     MenuCopyTime => ["Copy the time ({0})", "Скопировать время ({0})", "Скопіювати час ({0})"],
     MenuCopyLink => [
         "Copy a link to this moment",
@@ -1447,4 +1493,49 @@ messages! {
     UnitMbps => ["{0} Mbit/s", "{0} Мбит/с", "{0} Мбіт/с"],
     UnitKhz => ["{0} kHz", "{0} кГц", "{0} кГц"],
     UnitKb => ["{0} KB", "{0} КБ", "{0} КБ"],
+    OcrDisabled => [
+        "OCR is disabled in settings",
+        "OCR отключен в настройках",
+        "OCR вимкнено в налаштуваннях"
+    ],
+    OcrStarted => [
+        "OCR started…",
+        "OCR запущен…",
+        "OCR запущено…"
+    ],
+    OcrCaptureFailed => [
+        "Could not capture frame: {0}",
+        "Не удалось захватить кадр: {0}",
+        "Не вдалося захопити кадр: {0}"
+    ],
+    OcrReadFailed => [
+        "Could not read captured frame: {0}",
+        "Не удалось прочитать кадр: {0}",
+        "Не вдалося прочитати кадр: {0}"
+    ],
+    OcrTranslateFailed => [
+        "Translation setup failed: {0}",
+        "Ошибка настройки перевода: {0}",
+        "Помилка налаштування перекладу: {0}"
+    ],
+    OcrResultTitle => [
+        "OCR Result",
+        "Результат OCR",
+        "Результат OCR"
+    ],
+    OcrNoTextFound => [
+        "No text found on this frame",
+        "Текст на кадре не найден",
+        "Текст на кадрі не знайдено"
+    ],
+    OcrCopyOriginal => [
+        "Copy original",
+        "Копировать оригинал",
+        "Скопіювати оригінал"
+    ],
+    OcrCopyTranslation => [
+        "Copy translation",
+        "Копировать перевод",
+        "Скопіювати переклад"
+    ],
 }

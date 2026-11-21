@@ -107,6 +107,13 @@ pub fn text(key: Tr) -> &'static str {
         Tr::TranslationSize => "翻译大小",
         Tr::AutoTranslateCheck => "没有我的语言的字幕时自动翻译",
         Tr::SectionTranslation => "翻译",
+        Tr::SectionOcr => "OCR",
+        Tr::OcrEnabledRow => "启用 OCR",
+        Tr::OcrEngineRow => "引擎",
+        Tr::OcrLanguagesRow => "语言",
+        Tr::OcrConfidenceRow => "置信度阈值",
+        Tr::OcrContextRow => "显示原文",
+        Tr::OcrContextHint => "在译文上方显示原文，方便语言学习",
         Tr::ServiceRow => "服务",
         Tr::ModelRow => "模型",
         Tr::ModelNameHint => "模型名称",
@@ -451,6 +458,7 @@ pub fn text(key: Tr) -> &'static str {
         Tr::IntroTranslation => {
             "把字幕翻译成你的语言。Google 翻译无需密钥；DeepL、OpenAI 和 Claude 需要 API 密钥。"
         }
+        Tr::IntroOcr => "识别视频画面上的文字并翻译。译文显示在每行原文下方，方便学习生词，又不遮挡主要内容。",
         Tr::IntroSpeech => {
             "视频没有字幕时，把语音转成字幕。一次性下载后在这台电脑上运行。观看时：字幕菜单 → “{0}”。"
         }
@@ -543,6 +551,8 @@ pub fn text(key: Tr) -> &'static str {
         Tr::MenuSaveFrame => "保存画面",
         Tr::MenuSaveFrameSubs => "保存带字幕的画面",
         Tr::MenuCopyFrame => "复制画面",
+        Tr::MenuOcrFrame => "识别画面文字",
+        Tr::MenuOcrFrameTranslate => "识别并翻译画面",
         Tr::MenuCopyTime => "复制时间（{0}）",
         Tr::MenuCopyLink => "复制此时刻的链接",
         Tr::MenuFullscreen => "全屏",
@@ -604,5 +614,14 @@ pub fn text(key: Tr) -> &'static str {
         Tr::UnitMbps => "{0} Mbit/s",
         Tr::UnitKhz => "{0} kHz",
         Tr::UnitKb => "{0} KB",
+        Tr::OcrDisabled => "设置中已禁用 OCR",
+        Tr::OcrStarted => "OCR 已启动…",
+        Tr::OcrCaptureFailed => "无法捕获画面：{0}",
+        Tr::OcrReadFailed => "无法读取捕获的画面：{0}",
+        Tr::OcrTranslateFailed => "翻译设置失败：{0}",
+        Tr::OcrResultTitle => "OCR 结果",
+        Tr::OcrNoTextFound => "此画面未检测到文字",
+        Tr::OcrCopyOriginal => "复制原文",
+        Tr::OcrCopyTranslation => "复制译文",
     }
 }

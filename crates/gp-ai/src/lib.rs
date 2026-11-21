@@ -1,6 +1,7 @@
 pub mod anki;
 pub mod asr;
 pub mod download;
+pub mod ocr;
 mod http;
 pub mod torrserver;
 pub mod torznab;
@@ -74,3 +75,5 @@ pub fn fetch(url: &str) -> Result<Vec<u8>, AiError> {
 pub fn redirect_target(url: &str) -> Result<Option<String>, AiError> {
     http::redirect_target(url)
 }
+
+pub use ocr::{OcrEngine, OcrResult};

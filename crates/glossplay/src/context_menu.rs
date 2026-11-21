@@ -34,6 +34,8 @@ pub struct Picks {
     reset_video: bool,
     save_frame: Option<bool>,
     copy_frame: bool,
+    ocr_frame: bool,
+    ocr_frame_translate: bool,
     copy_time: bool,
     copy_link: bool,
     paste: bool,
@@ -320,6 +322,14 @@ impl App {
             if ui.button(t(Tr::MenuCopyFrame)).clicked() {
                 p.copy_frame = true;
             }
+            ui.separator();
+            let ocr_enabled = self.config.ocr.enabled;
+            if ui.add_enabled(ocr_enabled, egui::Button::new(t(Tr::MenuOcrFrame))).clicked() {
+                p.ocr_frame = true;
+            }
+            if ui.add_enabled(ocr_enabled, egui::Button::new(t(Tr::MenuOcrFrameTranslate))).clicked() {
+                p.ocr_frame_translate = true;
+            }
         });
         p.places.push(("frame", r.response.rect));
         let clock = theme::clock(self.snap.pos);
@@ -410,6 +420,12 @@ impl App {
         }
         if p.copy_frame {
             self.copy_frame();
+        }
+        if p.ocr_frame {
+            self.ocr_current_frame(false);
+        }
+        if p.ocr_frame_translate {
+            self.ocr_current_frame(true);
         }
         if p.copy_time {
             let clock = theme::clock(self.snap.pos);

@@ -115,6 +115,21 @@ impl App {
             Err(e) => self.toast(tf(Tr::FrameNotSaved, &[&e])),
         }
     }
+
+    pub fn on_ocr_done(&mut self, request: u64, result: Result<Vec<OcrLine>, String>) {
+        match result {
+            Ok(lines) if !lines.is_empty() => {
+                self.ocr_result = Some((request, lines));
+                self.toast(t(Tr::OcrResultTitle));
+            }
+            Ok(_) => {
+                self.toast(t(Tr::OcrNoTextFound));
+            }
+            Err(e) => {
+                self.toast(tf(Tr::OcrReadFailed, &[&e]));
+            }
+        }
+    }
 }
 
 /// Runs at the end of every frame: moves a window shot along.

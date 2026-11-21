@@ -135,6 +135,7 @@ impl eframe::App for App {
         self.info_window(&ctx);
         self.asr_setup_dialog(&ctx);
         self.tts_setup_dialog(&ctx);
+        self.ocr_result_window(&ctx);
         self.toast_ui(&ctx);
         crate::frame::step(self, &ctx);
         crate::selftest::step(self, &ctx);
@@ -1839,6 +1840,52 @@ impl App {
             self.toast(e);
         }
         ctx.request_repaint_after(Duration::from_secs(1));
+    }
+
+    fn ocr_result_window(&mut self, ctx: &egui::Context) {
+        let Some((request, lines)) = self.ocr_result.take() else {
+            return;
+        };
+
+        let mut open = true;
+        egui::Window::new(t(Tr::OcrResultTitle))
+            .id(Id::new("ocr_result_window"))
+            .open(&mut open)
+            .resizable(true)
+            .default_width(600.0)
+            .default_height(400.0)
+            .show(ctx, |ui| {
+                egui::ScrollArea::vertical().show(ui, |ui| {
+                    for line in &lines {
+                        ui.group(|ui| {
+                            ui.horizontal_wrapped(|ui| {
+                                if !line.original.is_empty() {
+                                    ui.label(line.original.clone());
+                                }
+                                if !line.translated.is_empty() && line.translated != line.original {
+                                    ui.separator();
+                                    ui.label(egui::RichText::new(&line.translated).color(theme::accent()));
+                                }
+                            });
+                            ui.horizontal(|ui| {
+                                if ui.button(t(Tr::OcrCopyOriginal)).clicked() {
+                                    ui.ctx().copy_text(line.original.clone());
+                                }
+                                if !line.translated.is_empty() && line.translated != line.original {
+                                    if ui.button(t(Tr::OcrCopyTranslation)).clicked() {
+                                        ui.ctx().copy_text(line.translated.clone());
+                                    }
+                                }
+                            });
+                        });
+                    }
+                });
+            });
+
+        if !open {
+        } else {
+            self.ocr_result = Some((request, lines));
+        }
     }
 }
 

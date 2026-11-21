@@ -7,6 +7,7 @@ use eframe::egui;
 use gp_ai::AiError;
 use gp_ai::anki::{AnkiClient, AnkiNote};
 use gp_ai::asr::{AsrEngine, AsrOutput, WhisperServer};
+use gp_ai::ocr::{OcrEngine, OcrResult};
 use gp_ai::translate::{TranslateRequest, Translator, translate_resilient};
 use gp_core::asr_plan;
 use gp_core::{Cue, Ms};
@@ -79,6 +80,21 @@ pub enum Msg {
     },
     /// A frame read for the clipboard: width, height and RGBA rows from the top.
     FrameCopied(Result<(u32, u32, Vec<u8>), String>),
+    /// OCR result on a video frame: text lines with positions and translations.
+    OcrDone {
+        request: u64,
+        result: Result<Vec<OcrLine>, String>,
+    },
+}
+
+/// OCR result line with original text, translation, and screen position.
+#[derive(Debug, Clone)]
+pub struct OcrLine {
+    pub original: String,
+    pub translation: String,
+    /// Position in video pixels: (x, y, width, height).
+    pub bbox: (i32, i32, i32, i32),
+    pub confidence: u8,
 }
 
 pub struct TranslateJob {
@@ -302,6 +318,35 @@ impl Jobs {
 
     pub fn translate(&self, job: TranslateJob) {
         let _ = self.translate_tx.send(job);
+    }
+
+    /// Run OCR on a video frame (RGBA pixels) and translate the found text.
+    pub fn ocr_frame(
+        &self,
+        request: u64,
+        width: u32,
+        height: u32,
+        rgba: Vec<u8>,
+        config: gp_core::config::Ocr,
+        translator: Arc<dyn Translator>,
+        src_lang: Option<String>,
+        dst_lang: String,
+    ) {
+        let (tx, ctx, store) = (self.tx.clone(), self.ctx.clone(), self.store.clone());
+        std::thread::spawn(move || {
+            let result = run_ocr(
+                width,
+                height,
+                &rgba,
+                &config,
+                translator.as_ref(),
+                src_lang.as_deref(),
+                &dst_lang,
+                &store,
+            );
+            let _ = tx.send(Msg::OcrDone { request, result });
+            ctx.request_repaint();
+        });
     }
 
     pub fn load_embedded(
@@ -733,6 +778,65 @@ fn run_asr(
     save(&p);
     (asr.status)(t(Tr::TranscriptReady).into(), false);
     Ok(())
+}
+
+/// Run OCR on frame and translate found text lines.
+fn run_ocr(
+    width: u32,
+    height: u32,
+    rgba: &[u8],
+    config: &gp_core::config::Ocr,
+    translator: &dyn Translator,
+    src_lang: Option<&str>,
+    dst_lang: &str,
+    store: &std::sync::Mutex<gp_store::Store>,
+) -> Result<Vec<OcrLine>, String> {
+    if !config.enabled {
+        return Err("OCR is disabled in settings".into());
+    }
+
+    let mut engine = OcrEngine::new(config).map_err(|e| e.to_string())?;
+
+    let ocr_results = engine
+        .recognize_rgba(width, height, rgba)
+        .map_err(|e| e.to_string())?;
+
+    // Filter by confidence threshold
+    let filtered: Vec<_> = ocr_results
+        .into_iter()
+        .filter(|r| r.confidence >= config.confidence_threshold)
+        .collect();
+
+    if filtered.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    // Extract texts for translation
+    let texts: Vec<String> = filtered.iter().map(|r| r.text.clone()).collect();
+
+    // Translate using cached translation
+    let outcome = crate::jobs::translate_cached(
+        store,
+        translator,
+        src_lang,
+        dst_lang,
+        &texts,
+        &[],
+    )
+    .map_err(|e| e.to_string())?;
+
+    // Combine OCR results with translations
+    let mut lines = Vec::new();
+    for (ocr_result, translation) in filtered.into_iter().zip(outcome.results) {
+        lines.push(OcrLine {
+            original: ocr_result.text,
+            translation,
+            bbox: ocr_result.bbox,
+            confidence: ocr_result.confidence,
+        });
+    }
+
+    Ok(lines)
 }
 
 #[cfg(test)]

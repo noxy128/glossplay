@@ -17,6 +17,7 @@ pub enum SettingsTab {
     Languages,
     Subtitles,
     Translation,
+    Ocr,
     SpeechRecognition,
     VoiceOver,
     Words,
@@ -25,10 +26,11 @@ pub enum SettingsTab {
 }
 
 impl SettingsTab {
-    pub const ALL: [SettingsTab; 8] = [
+    pub const ALL: [SettingsTab; 9] = [
         SettingsTab::Languages,
         SettingsTab::Subtitles,
         SettingsTab::Translation,
+        SettingsTab::Ocr,
         SettingsTab::SpeechRecognition,
         SettingsTab::VoiceOver,
         SettingsTab::Words,
@@ -42,6 +44,7 @@ impl SettingsTab {
             SettingsTab::Languages => "languages",
             SettingsTab::Subtitles => "subtitles",
             SettingsTab::Translation => "translation",
+            SettingsTab::Ocr => "ocr",
             SettingsTab::SpeechRecognition => "speech_recognition",
             SettingsTab::VoiceOver => "voice_over",
             SettingsTab::Words => "words",
@@ -59,6 +62,7 @@ impl SettingsTab {
             SettingsTab::Languages => Tr::SectionLanguages,
             SettingsTab::Subtitles => Tr::SectionSubtitles,
             SettingsTab::Translation => Tr::SectionTranslation,
+            SettingsTab::Ocr => Tr::SectionOcr,
             SettingsTab::SpeechRecognition => Tr::SectionSpeechRecognition,
             SettingsTab::VoiceOver => Tr::SectionVoiceOver,
             SettingsTab::Words => Tr::SectionWords,
@@ -80,6 +84,7 @@ impl SettingsTab {
                 ],
             ),
             SettingsTab::Translation => t(Tr::IntroTranslation).to_owned(),
+            SettingsTab::Ocr => t(Tr::IntroOcr).to_owned(),
             SettingsTab::SpeechRecognition => tf(Tr::IntroSpeech, &[&t(Tr::TranscribeSpeech)]),
             SettingsTab::VoiceOver => tf(Tr::IntroVoice, &[&t(Tr::MenuVoiceOver)]),
             SettingsTab::Words => tf(Tr::IntroWords, &[&key(Command::Sidebar)]),
@@ -167,6 +172,9 @@ impl App {
                                         SettingsTab::Subtitles => subtitles(ui, &form, &mut draft),
                                         SettingsTab::Translation => {
                                             translation(ui, &form, &mut draft)
+                                        }
+                                        SettingsTab::Ocr => {
+                                            ocr(ui, &form, &mut draft)
                                         }
                                         SettingsTab::SpeechRecognition => {
                                             let (action, change) =
@@ -693,6 +701,61 @@ fn translation(ui: &mut egui::Ui, form: &Form, draft: &mut Config) {
         t(Tr::AutoTranslateCheck),
         Some(t(Tr::InfoAutoTranslate)),
     );
+}
+
+fn ocr(ui: &mut egui::Ui, form: &Form, draft: &mut Config) {
+    let ocr = &mut draft.ocr;
+    form.check(
+        ui,
+        &mut ocr.enabled,
+        t(Tr::OcrEnabledRow),
+        Some(t(Tr::OcrContextHint)),
+    );
+    if !ocr.enabled {
+        return;
+    }
+    form.row(ui, t(Tr::OcrEngineRow), None, |ui| {
+        egui::ComboBox::from_id_salt("ocr-engine")
+            .width(form.field)
+            .selected_text(ocr_engine_name(&ocr.engine))
+            .show_ui(ui, |ui| {
+                for id in ["rapidocr", "paddleocr"] {
+                    ui.selectable_value(&mut ocr.engine, id.to_owned(), ocr_engine_name(id));
+                }
+            });
+    });
+    form.row(
+        ui,
+        t(Tr::ModelFileRow),
+        None,
+        |ui| {
+            form.path(ui, &mut ocr.model_path);
+        },
+    );
+    form.row(ui, t(Tr::OcrLanguagesRow), None, |ui| {
+        form.text(ui, &mut ocr.languages, "en,ru,zh");
+    });
+    form.row(ui, t(Tr::OcrConfidenceRow), None, |ui| {
+        form.slider(
+            ui,
+            egui::Slider::new(&mut ocr.confidence_threshold, 0..=100).suffix("%"),
+        );
+    });
+    form.check(
+        ui,
+        &mut ocr.show_context,
+        t(Tr::OcrContextRow),
+        Some(t(Tr::OcrContextHint)),
+    );
+}
+
+/// Engine display name.
+fn ocr_engine_name(id: &str) -> &'static str {
+    match id {
+        "rapidocr" => "RapidOCR (ONNX)",
+        "paddleocr" => "PaddleOCR",
+        _ => "Unknown",
+    }
 }
 
 /// Returns what the setup buttons asked for, and whether "Change…" was pressed.
