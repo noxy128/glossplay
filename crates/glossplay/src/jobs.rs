@@ -7,7 +7,7 @@ use eframe::egui;
 use gp_ai::AiError;
 use gp_ai::anki::{AnkiClient, AnkiNote};
 use gp_ai::asr::{AsrEngine, AsrOutput, WhisperServer};
-use gp_ai::ocr::{OcrEngine, OcrResult};
+use gp_ai::ocr::OcrEngine;
 use gp_ai::translate::{TranslateRequest, Translator, translate_resilient};
 use gp_core::asr_plan;
 use gp_core::{Cue, Ms};
@@ -328,6 +328,7 @@ impl Jobs {
         height: u32,
         rgba: Vec<u8>,
         config: gp_core::config::Ocr,
+        translate: bool,
         translator: Arc<dyn Translator>,
         src_lang: Option<String>,
         dst_lang: String,
@@ -339,6 +340,7 @@ impl Jobs {
                 height,
                 &rgba,
                 &config,
+                translate,
                 translator.as_ref(),
                 src_lang.as_deref(),
                 &dst_lang,
@@ -786,6 +788,7 @@ fn run_ocr(
     height: u32,
     rgba: &[u8],
     config: &gp_core::config::Ocr,
+    translate: bool,
     translator: &dyn Translator,
     src_lang: Option<&str>,
     dst_lang: &str,
@@ -814,20 +817,17 @@ fn run_ocr(
     // Extract texts for translation
     let texts: Vec<String> = filtered.iter().map(|r| r.text.clone()).collect();
 
-    // Translate using cached translation
-    let outcome = crate::jobs::translate_cached(
-        store,
-        translator,
-        src_lang,
-        dst_lang,
-        &texts,
-        &[],
-    )
-    .map_err(|e| e.to_string())?;
+    let translations = if translate {
+        crate::jobs::translate_cached(store, translator, src_lang, dst_lang, &texts, &[])
+            .map_err(|e| e.to_string())?
+            .results
+    } else {
+        vec![String::new(); texts.len()]
+    };
 
     // Combine OCR results with translations
     let mut lines = Vec::new();
-    for (ocr_result, translation) in filtered.into_iter().zip(outcome.results) {
+    for (ocr_result, translation) in filtered.into_iter().zip(translations) {
         lines.push(OcrLine {
             original: ocr_result.text,
             translation,

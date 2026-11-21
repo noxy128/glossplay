@@ -4,8 +4,12 @@
 use crate::AiError;
 use gp_core::config::Ocr as OcrConfig;
 use image::{DynamicImage, ImageBuffer, Rgba};
-use ndarray::{Array4, s};
-use ort::{GraphOptimizationLevel, Session, SessionBuilder};
+use ndarray::ArrayView2;
+use ort::{
+    environment::Environment,
+    session::{Session, builder::GraphOptimizationLevel},
+    value::Tensor,
+};
 use std::path::{Path, PathBuf};
 
 // RapidOCR model URLs (hosted on Hugging Face)
@@ -33,6 +37,8 @@ pub struct OcrEngine {
     rec_session: Session,
     rec_labels: Vec<String>,
     confidence_threshold: u8,
+    // Sessions borrow the process-wide runtime environment.
+    _environment: Environment,
 }
 
 impl OcrEngine {
@@ -47,7 +53,12 @@ impl OcrEngine {
         let rec_path = Self::ensure_model(&model_dir, "rec.onnx", REC_MODEL_URL)?;
         let labels_path = Self::ensure_model(&model_dir, "labels.txt", REC_LABEL_URL)?;
 
-        let det_session = SessionBuilder::new()
+        let environment = ort::init()
+            .with_name("glossplay-ocr")
+            .build()
+            .map_err(|e| AiError::Config(format!("ORT environment failed: {e}")))?;
+
+        let det_session = Session::builder(&environment)
             .map_err(|e| AiError::Config(format!("ORT session builder failed: {e}")))?
             .with_optimization_level(GraphOptimizationLevel::Level3)
             .map_err(|e| AiError::Config(format!("ORT optimization failed: {e}")))?
@@ -56,7 +67,7 @@ impl OcrEngine {
             .commit_from_file(&det_path)
             .map_err(|e| AiError::Config(format!("load det model failed: {e}")))?;
 
-        let rec_session = SessionBuilder::new()
+        let rec_session = Session::builder(&environment)
             .map_err(|e| AiError::Config(format!("ORT session builder failed: {e}")))?
             .with_optimization_level(GraphOptimizationLevel::Level3)
             .map_err(|e| AiError::Config(format!("ORT optimization failed: {e}")))?
@@ -76,6 +87,7 @@ impl OcrEngine {
             rec_session,
             rec_labels,
             confidence_threshold: config.confidence_threshold,
+            _environment: environment,
         })
     }
 
@@ -141,17 +153,27 @@ impl OcrEngine {
     }
 
     /// Detect text regions using DBNet.
-    fn detect_text(&self, img: &DynamicImage) -> Result<Vec<Vec<(f32, f32)>>, AiError> {
+    fn detect_text(&mut self, img: &DynamicImage) -> Result<Vec<Vec<(f32, f32)>>, AiError> {
         let (input_data, new_w, new_h, ratio_w, ratio_h) = preprocess_det(img);
-        let input_array = Array4::from_shape_vec((1, 3, new_h, new_w), input_data)
-            .map_err(|e| AiError::Config(format!("det input shape failed: {e}")))?;
+        let input = Tensor::from_array(([1usize, 3, new_h, new_w], input_data))
+            .map_err(|e| AiError::Config(format!("det input tensor failed: {e}")))?;
 
-        let outputs = self.det_session.run(ort::inputs!["x" => input_array.view()])
+        let outputs = self.det_session.run(ort::inputs!["x" => input])
             .map_err(|e| AiError::Config(format!("det inference failed: {e}")))?;
 
-        let prob_map = outputs["maps"].try_extract_tensor::<f32>()
+        let (shape, data) = outputs[0].try_extract_tensor::<f32>()
             .map_err(|e| AiError::Config(format!("det output extract failed: {e}")))?;
-        let prob_map = prob_map.slice(s![0, 0, .., ..]);
+        if shape.len() != 4 {
+            return Err(AiError::Config(format!("unexpected det output shape: {shape:?}")));
+        }
+        let map_h = shape[2] as usize;
+        let map_w = shape[3] as usize;
+        let map_len = map_h * map_w;
+        if data.len() < map_len {
+            return Err(AiError::Config("det output is shorter than its shape".into()));
+        }
+        let prob_map = ArrayView2::from_shape((map_h, map_w), &data[..map_len])
+            .map_err(|e| AiError::Config(format!("det output view failed: {e}")))?;
 
         // Simple threshold + contour finding (simplified)
         let boxes = postprocess_det(&prob_map, ratio_w, ratio_h, img.width() as f32, img.height() as f32);
@@ -160,7 +182,7 @@ impl OcrEngine {
 
     /// Recognize text in a cropped region.
     fn recognize_crop(
-        &self,
+        &mut self,
         img: &DynamicImage,
         box_pts: &[(f32, f32)],
     ) -> Result<Option<OcrResult>, AiError> {
@@ -194,15 +216,25 @@ impl OcrEngine {
             }
         }
 
-        let input_array = Array4::from_shape_vec((1, 3, 32, 320), input_data)
-            .map_err(|e| AiError::Config(format!("rec input shape failed: {e}")))?;
+        let input = Tensor::from_array(([1usize, 3, 32, 320], input_data))
+            .map_err(|e| AiError::Config(format!("rec input tensor failed: {e}")))?;
 
-        let outputs = self.rec_session.run(ort::inputs!["x" => input_array.view()])
+        let outputs = self.rec_session.run(ort::inputs!["x" => input])
             .map_err(|e| AiError::Config(format!("rec inference failed: {e}")))?;
 
-        let logits = outputs["out"].try_extract_tensor::<f32>()
+        let (shape, data) = outputs[0].try_extract_tensor::<f32>()
             .map_err(|e| AiError::Config(format!("rec output extract failed: {e}")))?;
-        let logits = logits.slice(s![0, .., ..]);
+        if shape.len() != 3 {
+            return Err(AiError::Config(format!("unexpected rec output shape: {shape:?}")));
+        }
+        let seq_len = shape[1] as usize;
+        let num_classes = shape[2] as usize;
+        let logits_len = seq_len * num_classes;
+        if data.len() < logits_len {
+            return Err(AiError::Config("rec output is shorter than its shape".into()));
+        }
+        let logits = ArrayView2::from_shape((seq_len, num_classes), &data[..logits_len])
+            .map_err(|e| AiError::Config(format!("rec output view failed: {e}")))?;
 
         // CTC greedy decode
         let (text, conf) = ctc_decode(&logits, &self.rec_labels)?;
@@ -291,7 +323,7 @@ fn nms(mut boxes: Vec<Vec<(f32, f32)>>, iou_threshold: f32) -> Vec<Vec<(f32, f32
         area_b.partial_cmp(&area_a).unwrap()
     });
 
-    let mut keep = Vec::new();
+    let mut keep: Vec<Vec<(f32, f32)>> = Vec::new();
     for box_a in boxes {
         let mut suppressed = false;
         for box_b in &keep {
@@ -390,7 +422,10 @@ mod tests {
     #[test]
     fn test_ctc_decode() {
         let labels: Vec<String> = (0..66).map(|i| char::from_u32(i + 32).unwrap().to_string()).collect();
-        let logits = ndarray::Array2::zeros((10, 67));
+        let mut logits = ndarray::Array2::zeros((10, 67));
+        for t in 0..10 {
+            logits[[t, 66]] = 1.0; // CTC blank wins at every step.
+        }
         let (text, conf) = ctc_decode(&logits.view(), &labels).unwrap();
         assert_eq!(text, "");
         assert_eq!(conf, 0.0);

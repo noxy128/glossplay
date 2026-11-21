@@ -145,6 +145,8 @@ impl App {
             reset_video: false,
             save_frame: None,
             copy_frame: false,
+            ocr_frame: false,
+            ocr_frame_translate: false,
             copy_time: false,
             copy_link: false,
             paste: false,
@@ -323,7 +325,7 @@ impl App {
                 p.copy_frame = true;
             }
             ui.separator();
-            let ocr_enabled = self.config.ocr.enabled;
+            let ocr_enabled = self.cfg.ocr.enabled;
             if ui.add_enabled(ocr_enabled, egui::Button::new(t(Tr::MenuOcrFrame))).clicked() {
                 p.ocr_frame = true;
             }

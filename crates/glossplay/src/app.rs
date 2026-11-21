@@ -293,6 +293,7 @@ impl App {
             frame_requests: 0,
             frame_done: None,
             toast_reveal: None,
+            ocr_result: None,
             cfg,
         };
         if app.cfg.tts.enabled && !app.quiet && app.dub_ready() {
@@ -1466,7 +1467,7 @@ impl App {
     /// Run OCR on the current video frame.
     /// If `translate` is true, also translates the recognized text.
     fn ocr_current_frame(&mut self, translate: bool) {
-        if !self.config.ocr.enabled {
+        if !self.cfg.ocr.enabled {
             self.toast(t(Tr::OcrDisabled));
             return;
         }
@@ -1482,22 +1483,18 @@ impl App {
             return;
         }
 
-        // Read the image
-        let image = match image::open(&temp_path) {
-            Ok(img) => img,
+        // Read the captured PNG using the existing frame decoder.
+        let (width, height, rgba) = match crate::frame::read_png(&temp_path) {
+            Ok(frame) => frame,
             Err(e) => {
-                self.toast(tf(Tr::OcrReadFailed, &[&e.to_string()]));
+                self.toast(tf(Tr::OcrReadFailed, &[&e]));
                 let _ = std::fs::remove_file(&temp_path);
                 return;
             }
         };
         let _ = std::fs::remove_file(&temp_path);
 
-        let rgb = image.to_rgb8();
-        let (width, height) = rgb.dimensions();
-        let rgba: Vec<u8> = rgb.pixels().flat_map(|p| [p[0], p[1], p[2], 255]).collect();
-
-        let translator = match make_translator(&self.config) {
+        let translator = match make_translator(&self.cfg) {
             Ok(t) => t,
             Err(e) => {
                 self.toast(tf(Tr::OcrTranslateFailed, &[&e]));
@@ -1505,13 +1502,13 @@ impl App {
             }
         };
 
-        let config = self.config.ocr.clone();
-        let src_lang = if self.config.general.learn_lang.is_empty() {
+        let config = self.cfg.ocr.clone();
+        let src_lang = if self.cfg.general.learn_lang.is_empty() {
             None
         } else {
-            Some(self.config.general.learn_lang.clone())
+            Some(self.cfg.general.learn_lang.clone())
         };
-        let dst_lang = self.config.general.native_lang.clone();
+        let dst_lang = self.cfg.general.native_lang.clone();
 
         let request = self.next_frame_request();
         self.jobs.ocr_frame(
@@ -1520,6 +1517,7 @@ impl App {
             height,
             rgba,
             config,
+            translate,
             translator,
             src_lang,
             dst_lang,

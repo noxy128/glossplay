@@ -1862,18 +1862,18 @@ impl App {
                                 if !line.original.is_empty() {
                                     ui.label(line.original.clone());
                                 }
-                                if !line.translated.is_empty() && line.translated != line.original {
+                                if !line.translation.is_empty() && line.translation != line.original {
                                     ui.separator();
-                                    ui.label(egui::RichText::new(&line.translated).color(theme::accent()));
+                                    ui.label(egui::RichText::new(&line.translation).color(theme::accent()));
                                 }
                             });
                             ui.horizontal(|ui| {
                                 if ui.button(t(Tr::OcrCopyOriginal)).clicked() {
                                     ui.ctx().copy_text(line.original.clone());
                                 }
-                                if !line.translated.is_empty() && line.translated != line.original {
+                                if !line.translation.is_empty() && line.translation != line.original {
                                     if ui.button(t(Tr::OcrCopyTranslation)).clicked() {
-                                        ui.ctx().copy_text(line.translated.clone());
+                                        ui.ctx().copy_text(line.translation.clone());
                                     }
                                 }
                             });

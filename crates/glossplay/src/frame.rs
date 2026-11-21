@@ -3,7 +3,7 @@
 
 use crate::app::App;
 use crate::i18n::{Tr, t, tf};
-use crate::jobs::Msg;
+use crate::jobs::{Msg, OcrLine};
 use crate::video;
 use eframe::egui;
 use gp_core::Ms;
